@@ -1,0 +1,281 @@
+## nationalism and economic perception q2 data
+
+rm(list=ls())
+
+setwd("Library/CloudStorage/OneDrive-TempleUniversity/Notebooks/research/Econ Nationalism_G/data")
+q2<- read_dta("FPDS Q2_Carnegie_NORC_merged.dta")
+
+library(haven)
+library(dplyr)
+library(estimatr)
+library(psych)
+library(tidyr)
+library(survey)
+library(ggplot2)
+library(modelsummary)
+
+# create anxiety measure. note that each produces a scale > .75,
+
+# standardize identify groups
+df <- q2 %>% 
+  mutate(
+    RACETHNICITY5 = case_when(
+      RACETHNICITY == 1 ~ 1, # white,
+      RACETHNICITY == 2 ~ 2, # black,
+      RACETHNICITY == 4 ~ 3, # hispanic
+      RACETHNICITY == 6 ~ 4, #asian
+      RACETHNICITY %in% c(3, 5) ~ 5, # other
+      TRUE ~ NA_real_
+  ),
+  PID3 = case_when( # 3 category partisanship 
+    DOV_PARTY5ID %in% c(-1, 3) ~ 2, #independent, none
+    DOV_PARTY5ID %in% c(1, 2) ~ 1, #dem, lean dem
+    DOV_PARTY5ID %in% c(4, 5) ~ 3, #rep, lean rep
+  ))
+
+# rescale anxiety meausres to 0-1
+df <- df %>%
+  mutate(
+    across(
+      c(eco_anxiety_1:eco_anxiety_4,
+        global_anxiety_1:global_anxiety_4,
+        dom_anxiety_1:dom_anxiety_4),
+      ~ .x -1, 
+      .names = "{.col}_rc"
+    ) 
+  )
+
+psych::alpha(
+  df %>% select(eco_anxiety_1_rc:eco_anxiety_4_rc))
+  
+psych::alpha(
+  df %>% select(global_anxiety_1_rc:global_anxiety_4_rc))
+
+psych::alpha(
+  df %>% select(dom_anxiety_1_rc:dom_anxiety_4_rc))
+
+df <- df %>%
+  mutate(
+    eco_anxiety_mean = rowMeans(
+      pick(eco_anxiety_1_rc:eco_anxiety_4_rc), 
+    na.rm = TRUE),
+    global_anxiety_mean = rowMeans(
+      pick(global_anxiety_1_rc:global_anxiety_4_rc),
+      na.rm = TRUE
+    ),
+    dom_anxiety_mean = rowMeans(
+      pick(dom_anxiety_1_rc:dom_anxiety_4_rc),
+      na.rm = TRUE
+    )
+  )
+
+# descb stat
+df %>%
+  select(
+    eco_anxiety_mean,
+    global_anxiety_mean, 
+    dom_anxiety_mean
+  ) %>%
+  psych::describe() %>%
+  select(n, mean, sd, min, max)
+
+#histograms 
+df %>%
+  select(eco_anxiety_mean, global_anxiety_mean, dom_anxiety_mean) %>%
+  pivot_longer(everything(),
+               names_to = "anxiety_type",
+               values_to = "anxiety_score") %>%
+  mutate(anxiety_type = factor(anxiety_type,
+                               levels = c("eco_anxiety_mean", "global_anxiety_mean", "dom_anxiety_mean"))) %>%
+  ggplot(aes(x = anxiety_score)) +
+  geom_histogram(aes(y = after_stat(density))) +
+  facet_wrap(~ anxiety_type, nrow = 1) +
+  labs(x = "Anxiety Score", y = "Density")
+
+# recode other dvs
+df <- df %>%
+  mutate(
+    inf_self_rc = 3 - inf_self,
+    jobloss_hh_rc = 4 - jobloss_hh,
+    jobloss_region_rc = 4 - jobloss_region
+  )
+
+df %>%
+  select(
+    inf_self_rc, jobloss_hh_rc, jobloss_region_rc,
+    ) %>%
+  psych::describe() %>%
+  select(n, mean, sd, min, max)
+
+df %>%
+  select(inf_self_rc, jobloss_hh_rc, jobloss_region_rc) %>%
+  cor(use = "pairwise.complete.obs")
+
+df %>%
+  select(inf_self_rc, jobloss_hh_rc, jobloss_region_rc) %>%
+  pivot_longer(everything(),
+               names_to = "concern_type",
+               values_to = "score") %>%
+  mutate(concern_type = factor(
+    concern_type,
+    levels = c("inf_self_rc", "jobloss_hh_rc", "jobloss_region_rc")
+  )) %>%
+  ggplot(aes(x = score)) +
+  geom_histogram(aes(y = after_stat(density))) +
+  facet_wrap(~ concern_type, nrow = 1) +
+  labs(x = "Economic concerns", y = "Density")
+
+
+# create natinionalism measure = nat_id1_4, id2_mean, chauv_mean, us_attach
+df <- df %>%
+  mutate(nat_id1 = nat_id1_4, #impr. of being am.
+         nat_id2_1_rc = 4 - nat_id2_1,
+         nat_id2_2_rc = 4 - nat_id2_2, 
+         nat_id2_3_rc = 4 - nat_id2_3,
+         chauv_1_rc =  3 - chauv_1,
+         chauv_2_rc = 3 - chauv_2,
+         id2_mean = rowMeans(
+           pick(nat_id2_1_rc:nat_id2_3_rc),
+           na.rm = TRUE),
+         chauv_mean = rowMeans(
+           pick(chauv_1_rc:chauv_2_rc),
+           na.rm = TRUE
+         ), 
+         US_attach = case_when(
+           geo_attach_4 == 4 ~ -2, #not close at all,
+           geo_attach_4 == 3 ~ -1, #not very close
+           geo_attach_4 == 5 ~ 0,
+           geo_attach_4 == 2 ~ 1, #close
+           geo_attach_4 == 1 ~ 2,
+           TRUE ~ NA_real_
+         ))
+
+# Descriptive statistics
+df %>%
+  select(nat_id1, id2_mean, chauv_mean, US_attach) %>%
+  psych::describe() %>%
+  select(n, mean, sd, min, max)
+
+df %>%
+  select(nat_id1, id2_mean, chauv_mean, US_attach) %>%
+  cor(use = "pairwise.complete.obs")
+
+df %>%
+  select(nat_id1, id2_mean, chauv_mean, US_attach) %>%
+  pivot_longer(everything(),
+               names_to = "measure",
+               values_to = "score") %>%
+  mutate(measure = factor(
+    measure,
+    levels = c("nat_id1", "id2_mean", "chauv_mean", "US_attach")
+  )) %>%
+  ggplot(aes(x = score)) +
+  geom_histogram(aes(y = after_stat(density))) +
+  facet_wrap(~ measure, nrow = 1) +
+  labs(x = "US Identity Measures", y = "Density")
+
+
+# ANXIETY MEASURES A > .75. with the exceltption of gloa_anx_4, but it's fine
+
+
+# analysis
+
+df <- df %>%
+  mutate(
+    across(c(AGE4, RACETHNICITY5, PID3, GENDER, EDUC5, INCOME4), factor)
+  )
+
+design <- svydesign(
+  ids = ~1,
+  weights = ~weight_final,
+  data = df
+)
+
+ivs <- c("nat_id1", "id2_mean", "chauv_mean", "US_attach")
+dvs <- c(
+  Eco = "eco_anxiety_mean",
+  Global = "global_anxiety_mean",
+  Dom = "dom_anxiety_mean",
+  Infself = "inf_self_rc",
+  `HH Job` = "jobloss_hh_rc",
+  `Reg Job` = "jobloss_region_rc"
+)
+
+# Table 1: Nationalism -> Anxiety / Economic Concerns
+
+
+results <- list()
+
+for (iv in ivs) {
+  for (j in seq_along(dvs)) {
+    
+    m <- svyglm(
+      as.formula(
+        paste(
+          dvs[j], "~", iv,
+          "+ AGE4 + RACETHNICITY5 + PID3 + GENDER + EDUC5 + INCOME4"
+        )
+      ),
+      design = design
+    )
+    
+    x <- broom::tidy(m) %>%
+      filter(term == iv) %>%
+      mutate(
+        IV = iv,
+        DV = names(dvs)[j]
+      )
+    
+    results[[paste(iv, j)]] <- x
+  }
+}
+
+results <- bind_rows(results)
+table1 <- results %>%
+  select(IV, DV, estimate, std.error, p.value) %>%
+  pivot_longer(
+    c(estimate, std.error, p.value),
+    names_to = "stat",
+    values_to = "value"
+  ) %>%
+  mutate(
+    stat = recode(
+      stat,
+      estimate = "b",
+      std.error = "se",
+      p.value = "p"
+    ),
+    value = round(value, 2)
+  ) %>%
+  pivot_wider(
+    names_from = c(DV, stat),
+    values_from = value
+  )
+
+table1
+
+# demographics -> nationalism measures
+m1 <- svyglm(nat_id1 ~ AGE4 + RACETHNICITY5 + PID3 + GENDER + EDUC5 + INCOME4,
+             design = design)
+
+m2 <- svyglm(id2_mean ~ AGE4 + RACETHNICITY5 + PID3 + GENDER + EDUC5 + INCOME4,
+             design = design)
+
+m3 <- svyglm(chauv_mean ~ AGE4 + RACETHNICITY5 + PID3 + GENDER + EDUC5 + INCOME4,
+             design = design)
+
+m4 <- svyglm(US_attach ~ AGE4 + RACETHNICITY5 + PID3 + GENDER + EDUC5 + INCOME4,
+             design = design)
+
+modelsummary(
+  list(
+    "ID1" = m1,
+    "ID2" = m2,
+    "Chauv" = m3,
+    "US Attachment" = m4
+  ),
+  estimate = "{estimate}",
+  statistic = c("se" = "{std.error}", "p" = "{p.value}"),
+  fmt = 2,
+  output = "html"
+)
